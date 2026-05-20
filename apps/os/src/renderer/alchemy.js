@@ -60,6 +60,16 @@ const WEEK_NOW = 1; // TODO: bump weekly, or derive from a cohort start date.
 // being visible — no point burning quota when nobody's looking.
 const FEED_REFRESH_MS = 24 * 60 * 60 * 1000;
 
+// Feed kill-switch — disabled per user request 2026-05-20. The feed tab
+// hits api.github.com /events ~35×/refresh and is the last remaining
+// rate-limit offender after v0.1.39's cohort-sync fix. While off:
+//   - the rail button is `hidden` in src/index.html
+//   - any stored `mode === "feed"` is migrated to "shapes" on mount
+//   - refreshFeed() short-circuits, so no background poll, no timer fire
+// To bring it back: flip FEED_DISABLED to false and remove the `hidden`
+// attribute on the rail button (index.html around line 300).
+const FEED_DISABLED = true;
+
 // Where the cohort-data markdown lives. Profile tab surfaces a link to
 // each team's record so participants can edit it directly. Hardcoded
 // for now — if this repo is ever renamed or the cohort-data dir moves
@@ -124,6 +134,13 @@ export function mount(container) {
     // Migrations:
     if (saved === "specimens") { state.mode = "shapes"; localStorage.setItem(ALCHEMY_LS_KEY, "shapes"); }
     if (saved === "legend")    { state.mode = "feed";   localStorage.setItem(ALCHEMY_LS_KEY, "feed"); }
+    // Feed off (see FEED_DISABLED above): if the user last left the rail
+    // on "feed", land them on "shapes" instead — otherwise we'd render
+    // a tab they no longer have a button for.
+    if (FEED_DISABLED && state.mode === "feed") {
+      state.mode = "shapes";
+      try { localStorage.setItem(ALCHEMY_LS_KEY, "shapes"); } catch {}
+    }
   } catch {}
   // Detail page state — if a record was open at last reload, restore it
   // so the user lands back where they were instead of on the grid.
@@ -142,7 +159,9 @@ export function mount(container) {
   // looked at the feed today. Mount-enter (line below) + tab-enter
   // (further down) + the explicit refresh button in the feed header give
   // the user plenty of "make it fresh" surface area on demand.
-  if (!state.refreshTimer) {
+  // Skipped entirely while FEED_DISABLED — no timer, no mount kick,
+  // nothing hitting api.github.com from this code path.
+  if (!FEED_DISABLED && !state.refreshTimer) {
     state.refreshTimer = setInterval(() => {
       if (state.mode !== "feed") return;
       refreshFeed({ source: "interval" });
@@ -3474,6 +3493,10 @@ function saveEventsCache() {
 const GH_REPO_RE = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/;
 
 async function refreshFeed({ source = "auto", force = false } = {}) {
+  // Kill-switch — see FEED_DISABLED at top of file. Short-circuits every
+  // caller (mount kick, interval, mode-enter, the in-header refresh
+  // button) so the github /events feed makes zero requests while off.
+  if (FEED_DISABLED) return;
   if (state.isFetching) return;
   const fresh = Date.now() - state.fetchedAt < FEED_REFRESH_MS;
   if (fresh && !force && state.events.length > 0) {

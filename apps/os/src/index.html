@@ -297,7 +297,12 @@
             <span class="ar-label">asks</span>
             <span class="ar-hint">pair on X · 5-day expiry</span>
           </button>
-          <button class="alchemy-rail-btn" data-alch-mode="feed" type="button" aria-selected="false">
+          <!-- feed tab disabled per user request 2026-05-20. The github
+               /events feed hits api.github.com ~35×/refresh which is
+               the rest of the rate-limit story after v0.1.39's cohort
+               sync fix. Re-enable by removing `hidden` and reverting
+               the disable-flag in alchemy.js (FEED_DISABLED). -->
+          <button class="alchemy-rail-btn" data-alch-mode="feed" type="button" aria-selected="false" hidden>
             <span class="ar-num">08</span>
             <span class="ar-label">feed</span>
             <span class="ar-hint">recent cohort activity</span>
